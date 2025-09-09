@@ -68,8 +68,6 @@ jobs:
                         php: 8.0
                     -   laravel: 11.*
                         php: 8.1
-                    -   laravel: 12.*
-                        php: 8.2
         runs-on: ${{ matrix.os }}
         name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }} - ${{ matrix.os }}
         env:
