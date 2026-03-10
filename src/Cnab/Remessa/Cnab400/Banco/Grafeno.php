@@ -108,10 +108,10 @@ class Grafeno extends AbstractRemessa implements RemessaContract
         $this->add(3, 9, 'REMESSA');
         $this->add(10, 11, '01');
         $this->add(12, 26, Util::formatCnab('X', 'COBRANCA', 15));
-        $this->add(27, 46, Util::formatCnab('X', Util::numberFormatGeral($this->getConta(), 8), 20));
+        $this->add(27, 46, Util::formatCnab('9', Util::numberFormatGeral($this->getConta(), 8), 20));
         $this->add(47, 76, Util::formatCnab('X', $this->getBeneficiario()->getNome(), 30));
         $this->add(77, 79, $this->getCodigoBanco());
-        $this->add(80, 94, Util::formatCnab('X', 'BMPMONEYPLUS', 15));
+        $this->add(80, 94, Util::formatCnab('X', 'BMP MONEY PLUS', 15));
         $this->add(95, 100, $this->getDataRemessa('dmy'));
         $this->add(101, 108, '');
         $this->add(109, 110, Util::formatCnab('X', 'MX', 2));
