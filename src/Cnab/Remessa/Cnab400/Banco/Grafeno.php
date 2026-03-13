@@ -55,7 +55,7 @@ class Grafeno extends AbstractRemessa implements RemessaContract
      *
      * @var array
      */
-    protected $carteiras = [1, 2, 3];
+    protected $carteiras = [1, 2, 3, 21];
 
     /**
      * Convenio cliente junto ao banco.
