@@ -241,6 +241,37 @@ class CalculoDV
 
     /*
     |--------------------------------------------------------------------------
+    | 084 - Sisprime
+    |--------------------------------------------------------------------------
+    */
+    public static function sisprimeAgencia($agencia)
+    {
+        $dv = Util::modulo11($agencia);
+
+        return $dv == 11 ? 0 : $dv;
+    }
+
+    public static function sisprimeContaCorrente($conta)
+    {
+        return Util::modulo11($conta);
+    }
+
+    public static function sisprimeNossoNumero($nossoNumero)
+    {
+        $dv = Util::modulo11($nossoNumero, 2, 7, 1);
+        if ($dv == 1){
+            $dv = 'P';
+        }elseif ($dv == 0){
+            $dv = 0;
+        }else {
+            $dv = 11 - $dv;
+        }
+
+        return $dv;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | 208 - BTG
     |--------------------------------------------------------------------------
     */
@@ -356,7 +387,18 @@ class CalculoDV
 
     public static function grafenoNossoNumero($carteira, $nossoNumero)
     {
-        return Util::modulo11(Util::numberFormatGeral($carteira, 2) . Util::numberFormatGeral($nossoNumero, 11), 2, 7, 0, 'P');
+        return Util::modulo11(Util::numberFormatGeral($carteira, 2) . Util::numberFormatGeral($nossoNumero, 11), 2, 7, 0);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 310 - Vortx
+    |--------------------------------------------------------------------------
+    */
+
+    public static function vortxNossoNumero($carteira, $nossoNumero)
+    {
+        return Util::modulo11(Util::numberFormatGeral($carteira, 2) . Util::numberFormatGeral($nossoNumero, 11), 2, 7, 0);
     }
 
     /*

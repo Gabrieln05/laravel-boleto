@@ -39,6 +39,8 @@ abstract class AbstractAPI implements Api
 
     protected $access_token = null;
 
+    protected $tokenStore = null;
+
     protected $debug = false;
 
     protected $log = null;
@@ -105,9 +107,9 @@ abstract class AbstractAPI implements Api
 
     abstract public function retrieveID($id);
 
-    abstract public function cancelNossoNumero($nossoNumero, $motivo);
+    abstract public function cancelNossoNumero($nossoNumero, $motivo = null);
 
-    abstract public function cancelID($id, $motivo);
+    abstract public function cancelID($id, $motivo = null);
 
     abstract public function retrieveList($inputedParams = []);
 
@@ -128,16 +130,28 @@ abstract class AbstractAPI implements Api
 
     public function retrieve(BoletoAPIContract $boleto)
     {
+        if ($boleto->getID()) {
+            return $this->retrieveID($boleto->getID());
+        }
+
         return $this->retrieveNossoNumero($boleto->getNossoNumero());
     }
 
-    public function cancel(BoletoAPIContract $boleto, $motivo)
+    public function cancel(BoletoAPIContract $boleto, $motivo = null)
     {
+        if ($boleto->getID()) {
+            return $this->cancelID($boleto->getID(), $motivo);
+        }
+
         return $this->cancelNossoNumero($boleto->getNossoNumero(), $motivo);
     }
 
     public function getPdf(BoletoAPIContract $boleto)
     {
+        if ($boleto->getID()) {
+            return $this->getPdfID($boleto->getID());
+        }
+
         return $this->getPdfNossoNumero($boleto->getNossoNumero());
     }
 
@@ -172,7 +186,7 @@ abstract class AbstractAPI implements Api
     }
 
     /**
-     * @return null
+     * @return ?string
      */
     public function getCertificado()
     {
@@ -192,7 +206,7 @@ abstract class AbstractAPI implements Api
     }
 
     /**
-     * @return null
+     * @return ?string
      */
     public function getCertificadoChave()
     {
@@ -332,20 +346,63 @@ abstract class AbstractAPI implements Api
     }
 
     /**
+     * Token store baseado em arquivo — sem dependências externas.
+     * $ttl em segundos (padrão 3500 ≈ 1h)
+     */
+    public static function fileTokenStore(string $path): callable
+    {
+        return function ($token = null, $ttl = 3500) use ($path) {
+            if ($token !== null) {
+                file_put_contents($path, json_encode(['t' => $token, 'e' => time() + $ttl]));
+
+                return;
+            }
+            if (! file_exists($path)) {
+                return null;
+            }
+            $data = json_decode(file_get_contents($path), true);
+
+            return ($data['e'] ?? 0) > time() ? $data['t'] : null;
+        };
+    }
+
+    /**
+     * @param callable $callback fn($token = null) — sem argumento lê, com argumento salva
+     *
+     * @return $this
+     */
+    public function setTokenStore(callable $callback)
+    {
+        $this->tokenStore = $callback;
+
+        return $this;
+    }
+
+    /**
      * @return null
      */
     public function getAccessToken()
     {
+        if ($this->tokenStore) {
+            return ($this->tokenStore)();
+        }
+
         return $this->access_token;
     }
 
     /**
-     * @param $access_token
+     * @param string $access_token
      *
      * @return AbstractAPI
      */
-    public function setAccessToken($access_token)
+    public function setAccessToken($access_token, $ttl = 3500)
     {
+        if ($this->tokenStore) {
+            ($this->tokenStore)($access_token, $ttl);
+
+            return $this;
+        }
+
         $this->access_token = $access_token;
 
         return $this;
@@ -421,7 +478,7 @@ abstract class AbstractAPI implements Api
     }
 
     /**
-     * @return null
+     * @return ?string
      */
     protected function getResponseHttpCode()
     {
@@ -608,21 +665,29 @@ abstract class AbstractAPI implements Api
 
     /**
      * @param $response
+     * @param int|null $headerSize
      *
      * @return stdClass
      */
-    private function parseResponse($response)
+    private function parseResponse($response, $headerSize = null)
     {
         $retorno = new stdClass();
-        $retorno->headers_text = substr($response, 0, strpos($response, "\r\n\r\n"));
-        $retorno->body_text = substr($response, strpos($response, "\r\n\r\n"));
+
+        if ($headerSize !== null) {
+            $retorno->headers_text = substr($response, 0, $headerSize);
+            $retorno->body_text = trim(substr($response, $headerSize));
+        } else {
+            $sep = strpos($response, "\r\n\r\n");
+            $retorno->headers_text = substr($response, 0, $sep);
+            $retorno->body_text = trim(substr($response, $sep + 4));
+        }
 
         $retorno->headers = [];
         foreach (explode("\r\n", $retorno->headers_text) as $i => $line) {
             if ($i === 0) {
                 $retorno->headers['http_code'] = $line;
-            } else {
-                [$key, $value] = explode(': ', $line);
+            } elseif (strpos($line, ': ') !== false) {
+                [$key, $value] = explode(': ', $line, 2);
                 $retorno->headers[$key] = $value;
             }
         }
@@ -644,8 +709,63 @@ abstract class AbstractAPI implements Api
                 throw new UnauthorizedException($this->getBaseUrl(), $this->getCertificado(), $this->getCertificadoChave(), $this->getCertificadoSenha());
             }
 
-            throw new HttpException($this->getResponseHttpCode(), $this->getRequestInfo(), $retorno->body_text);
+            $message = $this->extractErrorMessage($retorno);
+
+            throw new HttpException($this->getResponseHttpCode(), $this->getRequestInfo(), $message);
         }
+    }
+
+    /**
+     * Tenta extrair a mensagem de erro mais legível do retorno da API.
+     * Ordem: campos conhecidos do JSON → objeto JSON completo → body_text bruto → código HTTP + descrição.
+     *
+     * @param $retorno
+     *
+     * @return string
+     */
+    private function extractErrorMessage($retorno)
+    {
+        $jsonFields = ['message', 'mensagem', 'error', 'erro', 'detail', 'details', 'description', 'titulo', 'title', 'erros', 'errors'];
+
+        if (! empty($retorno->body) && is_object($retorno->body)) {
+            foreach ($jsonFields as $field) {
+                if (! empty($retorno->body->$field)) {
+                    $value = $retorno->body->$field;
+
+                    return is_string($value)
+                        ? $value
+                        : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+                }
+            }
+
+            return json_encode($retorno->body, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        }
+
+        if (! empty($retorno->body_text)) {
+            return $retorno->body_text;
+        }
+
+        $httpMessages = [
+            400 => 'Bad Request',
+            401 => 'Unauthorized',
+            403 => 'Forbidden',
+            404 => 'Not Found',
+            405 => 'Method Not Allowed',
+            408 => 'Request Timeout',
+            409 => 'Conflict',
+            410 => 'Gone',
+            422 => 'Unprocessable Entity',
+            429 => 'Too Many Requests',
+            500 => 'Internal Server Error',
+            502 => 'Bad Gateway',
+            503 => 'Service Unavailable',
+            504 => 'Gateway Timeout',
+        ];
+
+        $code = $this->getResponseHttpCode();
+        $description = isset($httpMessages[$code]) ? $httpMessages[$code] : 'Unknown Error';
+
+        return sprintf('HTTP %d %s', $code, $description);
     }
 
     /**
@@ -665,6 +785,7 @@ abstract class AbstractAPI implements Api
         }
         do {
             if ($exec = curl_exec($this->curl)) {
+                $headerSize = curl_getinfo($this->curl, CURLINFO_HEADER_SIZE);
                 $this->setResponseHttpCode(curl_getinfo($this->curl, CURLINFO_HTTP_CODE));
                 $this->setRequestInfo(curl_getinfo($this->curl));
                 curl_close($this->curl);
@@ -674,7 +795,7 @@ abstract class AbstractAPI implements Api
                     fclose($this->log);
                     $this->log = ob_get_clean();
                 }
-                $retorno = $this->parseResponse($exec);
+                $retorno = $this->parseResponse($exec, $headerSize);
                 $this->handleException($retorno);
 
                 return $retorno;

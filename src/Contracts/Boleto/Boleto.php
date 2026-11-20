@@ -11,12 +11,14 @@ interface Boleto
     const COD_BANCO_SANTANDER = '033';
     const COD_BANCO_INTER = '077';
     const COD_BANCO_AILOS = '085';
+    const COD_BANCO_SISPRIME = '084';
     const COD_BANCO_CEF = '104';
     const COD_BANCO_CRESOL = '133';
     const COD_BANCO_BTG = '208';
     const COD_BANCO_BRADESCO = '237';
     const COD_BANCO_ABC = '246';
     const COD_BANCO_GRAFENO = '274';
+    const COD_BANCO_VORTX = '310';
     const COD_BANCO_C6 = '336';
     const COD_BANCO_ITAU = '341';
     const COD_BANCO_HSBC = '399';

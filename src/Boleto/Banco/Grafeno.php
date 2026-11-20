@@ -24,7 +24,7 @@ class Grafeno extends AbstractBoleto implements BoletoContract
      *
      * @var array
      */
-    protected $carteiras = [1, 2, 3];
+    protected $carteiras = [1, 2, 3, 21];
 
     /**
      * Espécie do documento, coódigo para remessa
